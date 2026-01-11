@@ -6,7 +6,7 @@ from typing import Literal, assert_never
 
 from browser.content import Content, HtmlContent
 from browser.content_fetcher import fetch_content
-from browser.lex import Text, Tag, lex
+from browser.html_parser import HTMLParser, Text, Element
 
 from .url import AboutUrl, Url, UrlParseError
 
@@ -145,7 +145,7 @@ def get_font(size: int, bold: bool, italic: bool) -> Font:
 
 
 class Layout:
-    def __init__(self, tokens: list[Text | Tag], width: int, hstep: int):
+    def __init__(self, tree: Element, width: int, hstep: int):
         self.width = width
         self.hstep = hstep
         self.cursor_x = hstep
@@ -156,46 +156,49 @@ class Layout:
         self.line: list[tuple[int, str, Font]] = []
         self.display_list: DisplayList = []
 
-        for tok in tokens:
-            self.token(tok)
+        self.recurse(tree)
         self.flush()
 
-    def token(self, tok: Text | Tag):
-        if isinstance(tok, Text):
-            self.text(tok)
+    def recurse(self, tree: Text | Element):
+        if isinstance(tree, Text):
+            for word in tree.text.split():
+                self.word(word)
         else:
-            self.tag(tok)
+            self.open_tag(tree.tag)
+            for child in tree.children:
+                self.recurse(child)
+            self.close_tag(tree.tag)
 
-    def text(self, tok: Text):
+    def word(self, word: str):
         font = get_font(self.size, self.weight == "bold", self.style == "italic")
-        for word in tok.text.split():
-            w = font.measure(word)
-            if self.cursor_x + w > self.width - self.hstep:
-                self.flush()
-            self.line.append((self.cursor_x, word, font))
-            self.cursor_x += w + font.measure(" ")
+        w = font.measure(word)
+        if self.cursor_x + w > self.width - self.hstep:
+            self.flush()
+        self.line.append((self.cursor_x, word, font))
+        self.cursor_x += w + font.measure(" ")
 
-    def tag(self, tok: Tag):
-        tag = tok.tag.lower()
+    def open_tag(self, tag: str):
         if tag == "b":
             self.weight = "bold"
-        elif tag == "/b":
-            self.weight = "normal"
         elif tag == "i":
             self.style = "italic"
-        elif tag == "/i":
-            self.style = "roman"
         elif tag == "big":
             self.size += 4
-        elif tag == "/big":
-            self.size -= 4
         elif tag == "small":
             self.size -= 2
-        elif tag == "/small":
-            self.size += 2
         elif tag == "br":
             self.flush()
-        elif tag == "/p":
+
+    def close_tag(self, tag: str):
+        if tag == "b":
+            self.weight = "normal"
+        elif tag == "i":
+            self.style = "roman"
+        elif tag == "big":
+            self.size -= 4
+        elif tag == "small":
+            self.size += 2
+        elif tag == "p":
             self.flush()
             self.cursor_y += 16
 
@@ -250,8 +253,8 @@ def _get_display_list(
     match content:
         case HtmlContent():
             body = content.data.decode("utf-8")
-            tokens = lex(body)
-            layout = Layout(tokens, width, hstep)
+            nodes = HTMLParser(body).parse()
+            layout = Layout(nodes, width, hstep)
             return layout.display_list
         case _:
             return []
