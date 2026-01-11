@@ -1,11 +1,12 @@
 import pathlib
 import tkinter
 from dataclasses import dataclass
+from tkinter.font import Font
 from typing import Literal, assert_never
 
 from browser.content import Content, HtmlContent
 from browser.content_fetcher import fetch_content
-from browser.renderer import _render_html_to_text
+from browser.lex import Text, Tag, lex
 
 from .url import AboutUrl, Url, UrlParseError
 
@@ -16,9 +17,8 @@ class BrowserOptions:
 
 
 Position = tuple[int, int]
-TextElement = tuple[Literal["text"], str]
+TextElement = tuple[Literal["text"], str, Font]
 BoxElement = tuple[Literal["box"], tuple[int, int]]
-# "image", <path>, <size>
 ImageElement = tuple[Literal["image"], str, tuple[int, int]]
 Element = TextElement | BoxElement | ImageElement
 DisplayList = list[tuple[Position, Element]]
@@ -115,22 +115,103 @@ class Browser:
             if y > self.scroll + self.height:
                 continue
             match element:
-                case ("text", text):
-                    _ = self.canvas.create_text(x, y - self.scroll, text=text)
+                case ("text", text, font):
+                    self.canvas.create_text(
+                        x, y - self.scroll, text=text, font=font, anchor="nw"
+                    )
                 case ("image", path, size):
                     image = _load_image(path)
-
-                    _ = self.canvas.create_image(
+                    self.canvas.create_image(
                         x, y - self.scroll, image=image, anchor="nw"
                     )
                 case ("box", (width, height)):
-                    _ = self.canvas.create_rectangle(
-                        x,
-                        y,
-                        x + width,
-                        y + height,
-                        fill="gray",
+                    self.canvas.create_rectangle(
+                        x, y, x + width, y + height, fill="gray"
                     )
+
+
+FONT_CACHE: dict[tuple[int, bool, bool], Font] = {}
+
+
+def get_font(size: int, bold: bool, italic: bool) -> Font:
+    key = (size, bold, italic)
+    if key not in FONT_CACHE:
+        FONT_CACHE[key] = Font(
+            size=size,
+            weight="bold" if bold else "normal",
+            slant="italic" if italic else "roman",
+        )
+    return FONT_CACHE[key]
+
+
+class Layout:
+    def __init__(self, tokens: list[Text | Tag], width: int, hstep: int):
+        self.width = width
+        self.hstep = hstep
+        self.cursor_x = hstep
+        self.cursor_y = 0
+        self.weight = "normal"
+        self.style = "roman"
+        self.size = 16
+        self.line: list[tuple[int, str, Font]] = []
+        self.display_list: DisplayList = []
+
+        for tok in tokens:
+            self.token(tok)
+        self.flush()
+
+    def token(self, tok: Text | Tag):
+        if isinstance(tok, Text):
+            self.text(tok)
+        else:
+            self.tag(tok)
+
+    def text(self, tok: Text):
+        font = get_font(self.size, self.weight == "bold", self.style == "italic")
+        for word in tok.text.split():
+            w = font.measure(word)
+            if self.cursor_x + w > self.width - self.hstep:
+                self.flush()
+            self.line.append((self.cursor_x, word, font))
+            self.cursor_x += w + font.measure(" ")
+
+    def tag(self, tok: Tag):
+        tag = tok.tag.lower()
+        if tag == "b":
+            self.weight = "bold"
+        elif tag == "/b":
+            self.weight = "normal"
+        elif tag == "i":
+            self.style = "italic"
+        elif tag == "/i":
+            self.style = "roman"
+        elif tag == "big":
+            self.size += 4
+        elif tag == "/big":
+            self.size -= 4
+        elif tag == "small":
+            self.size -= 2
+        elif tag == "/small":
+            self.size += 2
+        elif tag == "br":
+            self.flush()
+        elif tag == "/p":
+            self.flush()
+            self.cursor_y += 16
+
+    def flush(self):
+        if not self.line:
+            return
+        metrics = [font.metrics() for _, _, font in self.line]
+        max_ascent = max(m["ascent"] for m in metrics)
+        baseline = self.cursor_y + 1.25 * max_ascent
+        for x, word, font in self.line:
+            y = baseline - font.metrics("ascent")
+            self.display_list.append(((x, int(y)), ("text", word, font)))
+        max_descent = max(m["descent"] for m in metrics)
+        self.cursor_y = baseline + 1.25 * max_descent
+        self.cursor_x = self.hstep
+        self.line = []
 
 
 def _get_max_height(display_list: DisplayList, vstep: int) -> int:
@@ -168,36 +249,10 @@ def _get_display_list(
 ) -> DisplayList:
     match content:
         case HtmlContent():
-            text = _render_html_to_text(content)
-            display_list: DisplayList = []
-            cursor_x, cursor_y = (hstep, 0) if rtl else (width - hstep, 0)
-            iterator = _TextIterator(text)
-            for typ, c in iterator:
-                if c == "\n":
-                    if rtl:
-                        cursor_x = width - hstep
-                    else:
-                        cursor_x = hstep
-                    cursor_y += vstep
-                else:
-                    if typ == "emoji":
-                        display_list.append(
-                            (
-                                (cursor_x, cursor_y),
-                                ("image", str(_to_emoji_filepath(c)), (0, 0)),
-                            )
-                        )
-                    else:
-                        display_list.append(((cursor_x, cursor_y), ("text", c)))
-                    cursor_x += hstep if not rtl else -hstep
-
-                if (not rtl and cursor_x >= width - hstep) or (
-                    rtl and cursor_x < hstep
-                ):
-                    cursor_x = hstep if not rtl else width - hstep
-                    cursor_y += vstep
-
-            return display_list
+            body = content.data.decode("utf-8")
+            tokens = lex(body)
+            layout = Layout(tokens, width, hstep)
+            return layout.display_list
         case _:
             return []
 
