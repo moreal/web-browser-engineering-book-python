@@ -39,6 +39,7 @@ class Browser:
         self._bind_events()
         self._current_content: Content | None = None
         self._current_display_list: DisplayList = []
+        self._current_max_height: int = 0
 
     def _bind_events(self):
         self.window.bind("<Down>", self._scrolldown)
@@ -66,8 +67,7 @@ class Browser:
         self._update_display_list()
 
     def _update_scroll(self, delta: int):
-        max_height = _get_max_height(self._current_display_list, self.VSTEP)
-        self.scroll = max(min(self.scroll + delta, max_height - self.height), 0)
+        self.scroll = max(min(self.scroll + delta, self._current_max_height - self.height), 0)
         self._update_display_list()
 
     def open(self, url: str | Url) -> None:
@@ -93,12 +93,12 @@ class Browser:
             vstep=self.VSTEP,
             rtl=self.rtl,
         )
+        self._current_max_height = _get_max_height(display_list, self.VSTEP)
         if (
             vertical_scroll_bar := _get_vertical_scroll_bar(
-                display_list,
+                max_height=self._current_max_height,
                 scroll=self.scroll,
                 width=self.width,
-                vstep=self.VSTEP,
                 height=self.height,
             )
         ) is not None:
@@ -138,10 +138,8 @@ def _get_max_height(display_list: DisplayList, vstep: int) -> int:
 
 
 def _get_vertical_scroll_bar(
-    display_list: DisplayList, *, scroll: int, width: int, height: int, vstep: int
+    *, max_height: int, scroll: int, width: int, height: int
 ) -> DrawCommand | None:
-    max_height = _get_max_height(display_list, vstep)
-
     if max_height <= height:
         return None
 
