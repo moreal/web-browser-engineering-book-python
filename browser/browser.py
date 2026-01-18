@@ -6,7 +6,7 @@ from typing import Literal
 
 from browser.content import Content, HtmlContent
 from browser.content_fetcher import fetch_content
-from browser.html_parser import HTMLParser, Text, Element
+from browser.html_parser import Element, HTMLParser, Text
 from browser.layout import DrawCommand, DrawRect, collect_display_list, layout_document
 
 from .url import AboutUrl, Url, UrlParseError
@@ -148,9 +148,9 @@ def _get_vertical_scroll_bar(
     scroll_y = int(scroll * rate)
     return DrawRect(
         x1=width - HORIZONTAL_SCROLL_WIDTH,
-        y1=scroll_y,
+        y1=scroll + scroll_y,
         x2=width,
-        y2=scroll_y + vertical_scroll_length,
+        y2=scroll + scroll_y + vertical_scroll_length,
         color="gray",
     )
 
