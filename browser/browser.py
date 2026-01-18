@@ -59,6 +59,8 @@ class Browser:
         self._update_scroll(event.delta)
 
     def _configure(self, event: tkinter.Event):
+        if self.height == event.height and self.width == event.width:
+            return
         self.height = event.height
         self.width = event.width
         self._update_display_list()
