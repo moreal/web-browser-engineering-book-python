@@ -48,6 +48,10 @@ BLOCK_ELEMENTS = [
     "summary",
 ]
 
+SKIP_ELEMENTS = [
+    "head",
+]
+
 
 class FontLike(Protocol):
     def measure(self, text: str) -> int: ...
@@ -169,6 +173,8 @@ def layout_block(
         cursor_y = y
 
         for child in node.children:
+            if isinstance(child, Element) and child.tag in SKIP_ELEMENTS:
+                continue
             child_box = layout_block(child, x, cursor_y, width, hstep, get_font)
             children.append(child_box)
             cursor_y = child_box.y + child_box.height
@@ -213,9 +219,7 @@ class _InlineLayoutState:
         self.display_list: list[DrawCommand] = []
 
     def word(self, word: str) -> None:
-        font = self.get_font(
-            self.size, self.weight == "bold", self.style == "italic"
-        )
+        font = self.get_font(self.size, self.weight == "bold", self.style == "italic")
         w = font.measure(word)
         if self.cursor_x + w > self.start_x + self.width:
             self.flush()
@@ -252,9 +256,7 @@ class _InlineLayoutState:
             return
 
         metrics = [font.metrics() for _, _, font in self.line]
-        max_ascent = max(
-            m["ascent"] if isinstance(m, dict) else m for m in metrics
-        )
+        max_ascent = max(m["ascent"] if isinstance(m, dict) else m for m in metrics)
         baseline = self.cursor_y + 1.25 * max_ascent
 
         for x, word, font in self.line:
@@ -263,9 +265,7 @@ class _InlineLayoutState:
             y = baseline - ascent
             self.display_list.append(DrawText(x=x, y=int(y), text=word, font=font))
 
-        max_descent = max(
-            m["descent"] if isinstance(m, dict) else 4 for m in metrics
-        )
+        max_descent = max(m["descent"] if isinstance(m, dict) else 4 for m in metrics)
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = self.start_x
         self.line = []
