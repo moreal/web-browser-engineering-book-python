@@ -2,11 +2,12 @@ import pathlib
 import tkinter
 from dataclasses import dataclass
 from tkinter.font import Font
-from typing import Literal, assert_never
+from typing import Literal
 
 from browser.content import Content, HtmlContent
 from browser.content_fetcher import fetch_content
 from browser.html_parser import HTMLParser, Text, Element
+from browser.layout import DrawCommand, DrawRect, collect_display_list, layout_document
 
 from .url import AboutUrl, Url, UrlParseError
 
@@ -16,12 +17,7 @@ class BrowserOptions:
     http_version: Literal["1.0", "1.1"] = "1.0"
 
 
-Position = tuple[int, int]
-TextElement = tuple[Literal["text"], str, Font]
-BoxElement = tuple[Literal["box"], tuple[int, int]]
-ImageElement = tuple[Literal["image"], str, tuple[int, int]]
-Element = TextElement | BoxElement | ImageElement
-DisplayList = list[tuple[Position, Element]]
+DisplayList = list[DrawCommand]
 
 
 HORIZONTAL_SCROLL_WIDTH = 10
@@ -111,23 +107,12 @@ class Browser:
 
     def _display(self, display_list: DisplayList):
         self.canvas.delete("all")
-        for (x, y), element in display_list:
-            if y > self.scroll + self.height:
+        for cmd in display_list:
+            if cmd.top > self.scroll + self.height:
                 continue
-            match element:
-                case ("text", text, font):
-                    self.canvas.create_text(
-                        x, y - self.scroll, text=text, font=font, anchor="nw"
-                    )
-                case ("image", path, size):
-                    image = _load_image(path)
-                    self.canvas.create_image(
-                        x, y - self.scroll, image=image, anchor="nw"
-                    )
-                case ("box", (width, height)):
-                    self.canvas.create_rectangle(
-                        x, y, x + width, y + height, fill="gray"
-                    )
+            if cmd.bottom < self.scroll:
+                continue
+            cmd.execute(self.scroll, self.canvas)
 
 
 FONT_CACHE: dict[tuple[int, bool, bool], Font] = {}
@@ -144,86 +129,15 @@ def get_font(size: int, bold: bool, italic: bool) -> Font:
     return FONT_CACHE[key]
 
 
-class Layout:
-    def __init__(self, tree: Element, width: int, hstep: int):
-        self.width = width
-        self.hstep = hstep
-        self.cursor_x = hstep
-        self.cursor_y = 0
-        self.weight = "normal"
-        self.style = "roman"
-        self.size = 16
-        self.line: list[tuple[int, str, Font]] = []
-        self.display_list: DisplayList = []
-
-        self.recurse(tree)
-        self.flush()
-
-    def recurse(self, tree: Text | Element):
-        if isinstance(tree, Text):
-            for word in tree.text.split():
-                self.word(word)
-        else:
-            self.open_tag(tree.tag)
-            for child in tree.children:
-                self.recurse(child)
-            self.close_tag(tree.tag)
-
-    def word(self, word: str):
-        font = get_font(self.size, self.weight == "bold", self.style == "italic")
-        w = font.measure(word)
-        if self.cursor_x + w > self.width - self.hstep:
-            self.flush()
-        self.line.append((self.cursor_x, word, font))
-        self.cursor_x += w + font.measure(" ")
-
-    def open_tag(self, tag: str):
-        if tag == "b":
-            self.weight = "bold"
-        elif tag == "i":
-            self.style = "italic"
-        elif tag == "big":
-            self.size += 4
-        elif tag == "small":
-            self.size -= 2
-        elif tag == "br":
-            self.flush()
-
-    def close_tag(self, tag: str):
-        if tag == "b":
-            self.weight = "normal"
-        elif tag == "i":
-            self.style = "roman"
-        elif tag == "big":
-            self.size -= 4
-        elif tag == "small":
-            self.size += 2
-        elif tag == "p":
-            self.flush()
-            self.cursor_y += 16
-
-    def flush(self):
-        if not self.line:
-            return
-        metrics = [font.metrics() for _, _, font in self.line]
-        max_ascent = max(m["ascent"] for m in metrics)
-        baseline = self.cursor_y + 1.25 * max_ascent
-        for x, word, font in self.line:
-            y = baseline - font.metrics("ascent")
-            self.display_list.append(((x, int(y)), ("text", word, font)))
-        max_descent = max(m["descent"] for m in metrics)
-        self.cursor_y = baseline + 1.25 * max_descent
-        self.cursor_x = self.hstep
-        self.line = []
-
-
 def _get_max_height(display_list: DisplayList, vstep: int) -> int:
-    return max(map(lambda x: x[0][1], display_list)) + vstep
+    if not display_list:
+        return vstep
+    return max(cmd.bottom for cmd in display_list) + vstep
 
 
 def _get_vertical_scroll_bar(
     display_list: DisplayList, *, scroll: int, width: int, height: int, vstep: int
-) -> tuple[Position, BoxElement] | None:
+) -> DrawCommand | None:
     max_height = _get_max_height(display_list, vstep)
 
     if max_height <= height:
@@ -232,9 +146,12 @@ def _get_vertical_scroll_bar(
     rate = height / max_height
     vertical_scroll_length = int(height * rate)
     scroll_y = int(scroll * rate)
-    return (width - HORIZONTAL_SCROLL_WIDTH, scroll_y), (
-        "box",
-        (HORIZONTAL_SCROLL_WIDTH, vertical_scroll_length),
+    return DrawRect(
+        x1=width - HORIZONTAL_SCROLL_WIDTH,
+        y1=scroll_y,
+        x2=width,
+        y2=scroll_y + vertical_scroll_length,
+        color="gray",
     )
 
 
@@ -254,8 +171,8 @@ def _get_display_list(
         case HtmlContent():
             body = content.data.decode("utf-8")
             nodes = HTMLParser(body).parse()
-            layout = Layout(nodes, width, hstep)
-            return layout.display_list
+            box = layout_document(nodes, width, hstep, vstep, get_font)
+            return collect_display_list(box)
         case _:
             return []
 
