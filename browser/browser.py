@@ -187,6 +187,7 @@ h4 { font-size: 110%; }
 h5 { font-size: 100%; }
 h6 { font-size: 90%; }
 .thisisclass { color: red; }
+p.foo.bar { color: green; }
 """
 BROWSER_CSS_RULES = CSSParser(BROWSER_CSS).parse()
 
@@ -277,6 +278,7 @@ def _get_display_list(
                 # rules.extend(CSSParser(css_content.data.decode("utf-8")).parse())
 
             rules = sorted(rules, key=cascade_priority)
+            print(*rules, sep="\n")
             document = fill_style_with_rules(document, rules)
             box = layout_document(document, width, hstep, vstep, get_font)
             return collect_display_list(box)

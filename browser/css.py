@@ -31,6 +31,22 @@ class ClassSelector(Selector):
         )
 
 
+class SelectorSequence(Selector):
+    def __init__(self, *selectors: Selector):
+        self.selectors = selectors
+        self.priority = sum(selector.priority for selector in selectors)
+
+    def matches(self, element: ElementLike) -> bool:
+        print()
+        print()
+        for selector in self.selectors:
+            if not selector.matches(element):
+                print(f"{element=} {selector=} doesn't match")
+                return False
+            print(f"{element=} {selector=} match")
+        return True
+
+
 class DecendantSelector(Selector):
     def __init__(self, ancestor: Selector, descendant: Selector):
         self.ancestor = ancestor
@@ -57,6 +73,39 @@ class DecendantSelector(Selector):
 type CssAttributes = dict[str, str]
 
 
+# Expected input:
+# .aa
+# aa.bb
+def tag_to_selector(tag: str) -> Selector:
+    # Currently it doesn't support IdSelector.
+    selectors: list[Selector] = []
+    while tag:
+        if tag.startswith("."):  # Consume class
+            tag = tag[1:]
+            next_dot_index = tag.find(".")
+            if next_dot_index == -1:
+                selectors.append(ClassSelector(tag))
+                tag = ""
+            else:
+                selectors.append(ClassSelector(tag[:next_dot_index]))
+                tag = tag[next_dot_index:]
+        else:  # Just tag not supporting id.
+            next_dot_index = tag.find(".")
+            if next_dot_index == -1:
+                selectors.append(TagSelector(tag))
+                tag = ""
+            else:
+                selectors.append(TagSelector(tag[:next_dot_index]))
+                tag = tag[next_dot_index:]
+
+    if len(selectors) == 1:
+        return selectors[0]
+    elif len(selectors) > 1:
+        return SelectorSequence(*selectors)
+    else:
+        raise ValueError("Invalid selector")
+
+
 class CSSParser:
     def __init__(self, text: str):
         self.text = text
@@ -64,17 +113,11 @@ class CSSParser:
 
     def selector(self) -> Selector:
         tag = self.word(".-#").casefold()
-        if tag.startswith("."):
-            selector = ClassSelector(tag[1:])
-        else:
-            selector = TagSelector(tag)
+        selector = tag_to_selector(tag)
         self.skip_whitespace()
         while self.cursor < len(self.text) and self.text[self.cursor] != "{":
             tag = self.word(".-#").casefold()
-            if tag.startswith("."):
-                decendant_selector = ClassSelector(tag[1:])
-            else:
-                decendant_selector = TagSelector(tag)
+            decendant_selector = tag_to_selector(tag)
             selector = DecendantSelector(selector, decendant_selector)
             self.skip_whitespace()
         return selector
