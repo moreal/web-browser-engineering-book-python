@@ -28,6 +28,7 @@ DisplayList = list[DrawCommand]
 
 
 HORIZONTAL_SCROLL_WIDTH = 10
+SCROLL_STEP = 100
 
 
 class Browser:
@@ -57,14 +58,22 @@ class Browser:
         self.window.bind("<Configure>", self._configure)
 
     def _scrolldown(self, event):
-        self._update_scroll(100)
+        self._update_scroll(SCROLL_STEP)
 
     def _scrollup(self, event):
-        self._update_scroll(-100)
+        self._update_scroll(-SCROLL_STEP)
 
     def _mousewheel(self, event: tkinter.Event):
-        # FIXME: care cross platform (Windows, macOS, Linux)
-        self._update_scroll(event.delta)
+        # macOS: event.delta is typically ±1 to ±3
+        # Windows: event.delta is typically ±120
+        # Normalize and apply scroll step
+        if abs(event.delta) > 10:
+            # Windows style (delta is ±120)
+            direction = -1 if event.delta > 0 else 1
+        else:
+            # macOS style (delta is ±1 to ±3)
+            direction = -event.delta
+        self._update_scroll(direction * SCROLL_STEP)
 
     def _configure(self, event: tkinter.Event):
         if self.height == event.height and self.width == event.width:
