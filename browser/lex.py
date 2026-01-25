@@ -10,20 +10,20 @@ class Tag:
 
 def lex(body: str) -> list[Text | Tag]:
     out: list[Text | Tag] = []
-    buffer = ""
+    buffer: list[str] = []
     in_tag = False
     for c in body:
         if c == "<":
             in_tag = True
             if buffer:
-                out.append(Text(buffer))
-            buffer = ""
+                out.append(Text("".join(buffer)))
+            buffer = []
         elif c == ">":
             in_tag = False
-            out.append(Tag(buffer))
-            buffer = ""
+            out.append(Tag("".join(buffer)))
+            buffer = []
         else:
-            buffer += c
+            buffer.append(c)
     if not in_tag and buffer:
-        out.append(Text(buffer))
+        out.append(Text("".join(buffer)))
     return out

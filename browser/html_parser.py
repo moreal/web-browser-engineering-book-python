@@ -55,22 +55,22 @@ class HTMLParser:
         self.unfinished: list[Element] = []
 
     def parse(self) -> Element:
-        text = ""
+        text: list[str] = []
         in_tag = False
         for c in self.body:
             if c == "<":
                 in_tag = True
                 if text:
-                    self.add_text(text)
-                text = ""
+                    self.add_text("".join(text))
+                text = []
             elif c == ">":
                 in_tag = False
-                self.add_tag(text)
-                text = ""
+                self.add_tag("".join(text))
+                text = []
             else:
-                text += c
+                text.append(c)
         if not in_tag and text:
-            self.add_text(text)
+            self.add_text("".join(text))
         return self.finish()
 
     def get_attributes(self, text: str) -> tuple[str, dict[str, str]]:
