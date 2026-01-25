@@ -19,7 +19,7 @@ class Element:
         return "<" + self.tag + ">"
 
 
-SELF_CLOSING_TAGS = [
+SELF_CLOSING_TAGS = frozenset({
     "area",
     "base",
     "br",
@@ -34,9 +34,9 @@ SELF_CLOSING_TAGS = [
     "source",
     "track",
     "wbr",
-]
+})
 
-HEAD_TAGS = [
+HEAD_TAGS = frozenset({
     "base",
     "basefont",
     "bgsound",
@@ -46,7 +46,7 @@ HEAD_TAGS = [
     "title",
     "style",
     "script",
-]
+})
 
 
 class HTMLParser:
@@ -120,12 +120,12 @@ class HTMLParser:
             open_tags = [node.tag for node in self.unfinished]
             if open_tags == [] and tag != "html":
                 self.add_tag("html")
-            elif open_tags == ["html"] and tag not in ["head", "body", "/html"]:
+            elif open_tags == ["html"] and tag not in {"head", "body", "/html"}:
                 if tag in HEAD_TAGS:
                     self.add_tag("head")
                 else:
                     self.add_tag("body")
-            elif open_tags == ["html", "head"] and tag not in ["/head"] + HEAD_TAGS:
+            elif open_tags == ["html", "head"] and tag not in {"/head"} | HEAD_TAGS:
                 self.add_tag("/head")
             else:
                 break

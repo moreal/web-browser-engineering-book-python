@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 from browser.html_parser import Element, Text
 
-BLOCK_ELEMENTS = [
+BLOCK_ELEMENTS = frozenset({
     "html",
     "body",
     "article",
@@ -49,11 +49,11 @@ BLOCK_ELEMENTS = [
     "legend",
     "details",
     "summary",
-]
+})
 
-SKIP_ELEMENTS = [
+SKIP_ELEMENTS = frozenset({
     "head",
-]
+})
 
 
 @dataclass(frozen=True)
