@@ -19,6 +19,18 @@ class TagSelector(Selector):
         return element.tag == self.tag
 
 
+@dataclass(frozen=True)
+class ClassSelector(Selector):
+    class_name: str
+    priority: int = 10
+
+    def matches(self, element: ElementLike) -> bool:
+        return (
+            "class" in element.attributes
+            and self.class_name in element.attributes["class"].split()
+        )
+
+
 class DecendantSelector(Selector):
     def __init__(self, ancestor: Selector, descendant: Selector):
         self.ancestor = ancestor
@@ -51,12 +63,18 @@ class CSSParser:
         self.cursor = 0
 
     def selector(self) -> Selector:
-        tag = self.word().casefold()
-        selector = TagSelector(tag)
+        tag = self.word(".-#").casefold()
+        if tag.startswith("."):
+            selector = ClassSelector(tag[1:])
+        else:
+            selector = TagSelector(tag)
         self.skip_whitespace()
         while self.cursor < len(self.text) and self.text[self.cursor] != "{":
-            tag = self.word().casefold()
-            decendant_selector = TagSelector(tag)
+            tag = self.word(".-#").casefold()
+            if tag.startswith("."):
+                decendant_selector = ClassSelector(tag[1:])
+            else:
+                decendant_selector = TagSelector(tag)
             selector = DecendantSelector(selector, decendant_selector)
             self.skip_whitespace()
         return selector
@@ -93,11 +111,11 @@ class CSSParser:
             self.skip_whitespace()
         return pairs
 
-    def word(self):
+    def word(self, allowed_characters: str = "-#.%"):
         start = self.cursor
         while self.cursor < len(self.text) and (
             self.text[self.cursor].isalnum()
-            or self.text[self.cursor] in "-#.%"
+            or self.text[self.cursor] in allowed_characters
         ):
             self.cursor += 1
         if self.cursor == start:

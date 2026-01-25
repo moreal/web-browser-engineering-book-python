@@ -186,6 +186,7 @@ h3 { font-size: 125%; }
 h4 { font-size: 110%; }
 h5 { font-size: 100%; }
 h6 { font-size: 90%; }
+.thisisclass { color: red; }
 """
 RULES = CSSParser(BROWSER_CSS).parse()
 
