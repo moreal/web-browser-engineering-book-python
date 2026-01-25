@@ -117,15 +117,15 @@ class HTMLParser:
 
     def implicit_tags(self, tag: str | None) -> None:
         while True:
-            open_tags = [node.tag for node in self.unfinished]
-            if open_tags == [] and tag != "html":
+            num_open = len(self.unfinished)
+            if num_open == 0 and tag != "html":
                 self.add_tag("html")
-            elif open_tags == ["html"] and tag not in {"head", "body", "/html"}:
+            elif num_open == 1 and self.unfinished[0].tag == "html" and tag not in {"head", "body", "/html"}:
                 if tag in HEAD_TAGS:
                     self.add_tag("head")
                 else:
                     self.add_tag("body")
-            elif open_tags == ["html", "head"] and tag not in {"/head"} | HEAD_TAGS:
+            elif num_open == 2 and self.unfinished[0].tag == "html" and self.unfinished[1].tag == "head" and tag not in {"/head"} | HEAD_TAGS:
                 self.add_tag("/head")
             else:
                 break

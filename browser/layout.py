@@ -248,6 +248,7 @@ class _InlineLayoutState:
         self.cursor_x = x
         self.cursor_y = y
         self.width = width
+        self.max_x = x + width  # Pre-computed line break boundary
         self.hstep = hstep
         self.get_font = get_font
 
@@ -261,7 +262,7 @@ class _InlineLayoutState:
     def word(self, word: str) -> None:
         font = self.get_font(self.size, self.weight == "bold", self.style == "italic")
         w = font.measure(word)
-        if self.cursor_x + w > self.start_x + self.width:
+        if self.cursor_x + w > self.max_x:
             self.flush()
         self.line.append((self.cursor_x, word, font))
         self.cursor_x += w + font.measure(" ")
@@ -295,17 +296,26 @@ class _InlineLayoutState:
         if not self.line:
             return
 
-        metrics = [font.metrics() for _, _, font in self.line]
-        max_ascent = max(m["ascent"] if isinstance(m, dict) else m for m in metrics)
+        # Collect metrics once, extract ascent/descent values
+        line_with_metrics = [
+            (x, word, font, font.metrics())
+            for x, word, font in self.line
+        ]
+        max_ascent = max(
+            m["ascent"] if isinstance(m, dict) else m
+            for _, _, _, m in line_with_metrics
+        )
         baseline = self.cursor_y + 1.25 * max_ascent
 
-        for x, word, font in self.line:
-            font_metrics = font.metrics("ascent")
-            ascent = font_metrics if isinstance(font_metrics, int) else 0
+        for x, word, font, m in line_with_metrics:
+            ascent = m["ascent"] if isinstance(m, dict) else 0
             y = baseline - ascent
             self.display_list.append(DrawText(x=x, y=int(y), text=word, font=font))
 
-        max_descent = max(m["descent"] if isinstance(m, dict) else 4 for m in metrics)
+        max_descent = max(
+            m["descent"] if isinstance(m, dict) else 4
+            for _, _, _, m in line_with_metrics
+        )
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = self.start_x
         self.line = []
