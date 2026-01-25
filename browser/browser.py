@@ -188,7 +188,7 @@ h5 { font-size: 100%; }
 h6 { font-size: 90%; }
 .thisisclass { color: red; }
 """
-RULES = CSSParser(BROWSER_CSS).parse()
+BROWSER_CSS_RULES = CSSParser(BROWSER_CSS).parse()
 
 DEFAULT_INHERITED_PROPERTIES = {
     "font-size": "16px",
@@ -267,11 +267,16 @@ def _get_display_list(
                 and element.attributes.get("rel") == "stylesheet"
                 and "href" in element.attributes
             ]
-            # print(links)
-            rules = sorted(RULES, key=cascade_priority)
             css_contents = [fetch_content(link) for link in links]
-            # print(css_contents)
-            assert all(isinstance(x, CssContent) for x in css_contents)
+
+            rules = list(BROWSER_CSS_RULES)
+            for css_content in css_contents:
+                assert isinstance(css_content, CssContent)
+                # FIXME: encoding
+                # FIXME: Cannot load css files form browser.engineering
+                # rules.extend(CSSParser(css_content.data.decode("utf-8")).parse())
+
+            rules = sorted(rules, key=cascade_priority)
             document = fill_style_with_rules(document, rules)
             box = layout_document(document, width, hstep, vstep, get_font)
             return collect_display_list(box)
