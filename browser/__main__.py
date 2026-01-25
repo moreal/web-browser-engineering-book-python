@@ -1,17 +1,12 @@
 import tkinter
 from typing import Annotated
 
-import typer
-
 from browser.browser import Browser
 from browser.url import Url
 
-app = typer.Typer()
 
-
-@app.command()
 def main(
-    url: Annotated[str, typer.Argument(help="URL to open.")],
+    url: Annotated[str, "URL"],
 ):
     # browser = Browser(rtl=True)
     browser = Browser()
@@ -21,4 +16,9 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("url", help="URL to open.")
+    args = parser.parse_args()
+    main(args.url)

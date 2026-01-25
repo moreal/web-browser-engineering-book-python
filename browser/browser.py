@@ -1,15 +1,22 @@
+import functools
+import logging
 import pathlib
 import tkinter
 from dataclasses import dataclass
-from tkinter.font import Font
 from typing import Literal
 
 from browser.content import Content, HtmlContent
 from browser.content_fetcher import fetch_content
-from browser.html_parser import Element, HTMLParser, Text
-from browser.layout import DrawCommand, DrawRect, collect_display_list, layout_document
+from browser.html_parser import HTMLParser
+from browser.layout import (
+    DrawCommand,
+    DrawRect,
+    collect_display_list,
+    get_font,
+    layout_document,
+)
 
-from .url import AboutUrl, Url, UrlParseError
+from .url import Url
 
 
 @dataclass(frozen=True)
@@ -67,7 +74,9 @@ class Browser:
         self._update_display_list()
 
     def _update_scroll(self, delta: int):
-        self.scroll = max(min(self.scroll + delta, self._current_max_height - self.height), 0)
+        self.scroll = max(
+            min(self.scroll + delta, self._current_max_height - self.height), 0
+        )
         self._update_display_list()
 
     def open(self, url: str | Url) -> None:
@@ -115,20 +124,6 @@ class Browser:
             if cmd.bottom < self.scroll:
                 continue
             cmd.execute(self.scroll, self.canvas)
-
-
-FONT_CACHE: dict[tuple[int, bool, bool], Font] = {}
-
-
-def get_font(size: int, bold: bool, italic: bool) -> Font:
-    key = (size, bold, italic)
-    if key not in FONT_CACHE:
-        FONT_CACHE[key] = Font(
-            size=size,
-            weight="bold" if bold else "normal",
-            slant="italic" if italic else "roman",
-        )
-    return FONT_CACHE[key]
 
 
 def _get_max_height(display_list: DisplayList, vstep: int) -> int:

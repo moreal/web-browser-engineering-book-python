@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import functools
+import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Protocol
+from tkinter.font import Font
+from typing import TYPE_CHECKING, Callable, Literal, Protocol, TypedDict
 
 if TYPE_CHECKING:
     import tkinter
@@ -53,17 +56,12 @@ SKIP_ELEMENTS = [
 ]
 
 
-class FontLike(Protocol):
-    def measure(self, text: str) -> int: ...
-    def metrics(self, key: str | None = None) -> int | dict[str, int]: ...
-
-
 @dataclass(frozen=True)
 class DrawText:
     x: int
     y: int
     text: str
-    font: FontLike
+    font: FontWrapper
 
     @property
     def top(self) -> int:
@@ -78,7 +76,7 @@ class DrawText:
 
     def execute(self, scroll: int, canvas: tkinter.Canvas) -> None:
         canvas.create_text(
-            self.x, self.y - scroll, text=self.text, font=self.font, anchor="nw"
+            self.x, self.y - scroll, text=self.text, font=self.font.font, anchor="nw"
         )
 
 
@@ -118,7 +116,49 @@ class LayoutBox:
     node: Element | Text
 
 
-GetFont = Callable[[int, bool, bool], FontLike]
+class FontWrapper:
+    def __init__(self, font: Font):
+        self.font = font
+
+    @functools.cache
+    def measure(self, text: str) -> int:
+        return self.font.measure(text)
+
+    @functools.cache
+    def metrics(
+        self, option: Literal["ascent", "descent", "linespace"] | None = None
+    ) -> int | _MetricsDict:
+        if option is None:
+            return self.font.metrics()
+        return self.font.metrics(option)
+
+
+GetFont = Callable[[int, bool, bool], FontWrapper]
+
+
+FONT_CACHE: dict[tuple[int, bool, bool], FontWrapper] = {}
+
+
+class _MetricsDict(TypedDict):
+    ascent: int
+    descent: int
+    linespace: int
+    fixed: bool
+
+
+def get_font(size: int, bold: bool, italic: bool) -> FontWrapper:
+    logger = logging.getLogger(__name__)
+    key = (size, bold, italic)
+    if key not in FONT_CACHE:
+        logger.debug("Font cache missed %s", key)
+        FONT_CACHE[key] = FontWrapper(
+            Font(
+                size=size,
+                weight="bold" if bold else "normal",
+                slant="italic" if italic else "roman",
+            ),
+        )
+    return FONT_CACHE[key]
 
 
 def get_layout_mode(node: Element | Text) -> str:
