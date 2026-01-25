@@ -37,13 +37,9 @@ class SelectorSequence(Selector):
         self.priority = sum(selector.priority for selector in selectors)
 
     def matches(self, element: ElementLike) -> bool:
-        print()
-        print()
         for selector in self.selectors:
             if not selector.matches(element):
-                print(f"{element=} {selector=} doesn't match")
                 return False
-            print(f"{element=} {selector=} match")
         return True
 
 
@@ -75,7 +71,7 @@ type CssAttributes = dict[str, str]
 
 # Expected input:
 # .aa
-# aa.bb
+# aa.bb.cc
 def tag_to_selector(tag: str) -> Selector:
     # Currently it doesn't support IdSelector.
     selectors: list[Selector] = []

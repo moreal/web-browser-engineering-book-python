@@ -72,6 +72,87 @@ HEAD_TAGS = frozenset(
 )
 
 
+def get_attributes(text: str) -> tuple[str, dict[str, str]]:
+    from browser.parser_combinator import (
+        ParseResult,
+        alt,
+        char,
+        map,
+        seq,
+        take_until,
+        take_while1,
+        whitespace,
+    )
+
+    # Tag name parser
+    tag_name = take_while1(lambda c: not c.isspace())
+
+    # Attribute name: non-space, non-equals characters
+    attr_name = take_while1(lambda c: c not in ("=", " ", "\t", "\n", "\r", ">"))
+
+    # Quoted value with specific quote character
+    def quoted_value(quote: str):
+        return map(
+            seq(char(quote), take_until(quote), char(quote)),
+            lambda parts: parts[1],
+        )
+
+    # Unquoted value
+    unquoted_value = take_while1(lambda c: not c.isspace())
+
+    # Attribute value (quoted or unquoted)
+    attr_value = alt(quoted_value('"'), quoted_value("'"), unquoted_value)
+
+    # Full attribute: name with optional =value
+    def attribute(input: str) -> ParseResult[tuple[str, str]] | None:
+        name_result = attr_name(input)
+        if name_result is None:
+            return None
+        name = name_result.value.casefold()
+        input = name_result.remaining
+
+        eq_result = char("=")(input)
+        if eq_result is None:
+            return ParseResult((name, ""), name_result.remaining)
+
+        input = eq_result.remaining
+        value_result = attr_value(input)
+        if value_result is None:
+            return ParseResult((name, ""), input)
+
+        return ParseResult((name, value_result.value), value_result.remaining)
+
+    # Parse tag name
+    ws_result = whitespace(text)
+    text = ws_result.remaining
+
+    tag_result = tag_name(text)
+    if tag_result is None:
+        return "", {}
+
+    tag = tag_result.value.casefold()
+    text = tag_result.remaining
+
+    # Parse attributes
+    attributes: dict[str, str] = {}
+    while True:
+        ws_result = whitespace(text)
+        text = ws_result.remaining
+
+        if not text:
+            break
+
+        attr_result = attribute(text)
+        if attr_result is None:
+            break
+
+        key, value = attr_result.value
+        attributes[key] = value
+        text = attr_result.remaining
+
+    return tag, attributes
+
+
 class HTMLParser:
     def __init__(self, body: str):
         self.body = body
@@ -96,20 +177,6 @@ class HTMLParser:
             self.add_text("".join(text))
         return self.finish()
 
-    def get_attributes(self, text: str) -> tuple[str, dict[str, str]]:
-        parts = text.split()
-        tag = parts[0].casefold()
-        attributes: dict[str, str] = {}
-        for attrpair in parts[1:]:
-            if "=" in attrpair:
-                key, value = attrpair.split("=", 1)
-                if len(value) > 2 and value[0] in ["'", '"']:
-                    value = value[1:-1]
-                attributes[key.casefold()] = value
-            else:
-                attributes[attrpair.casefold()] = ""
-        return tag, attributes
-
     def add_text(self, text: str) -> None:
         if text.isspace():
             return
@@ -119,7 +186,7 @@ class HTMLParser:
         parent.children.append(node)
 
     def add_tag(self, tag: str) -> None:
-        tag, attributes = self.get_attributes(tag)
+        tag, attributes = get_attributes(tag)
         if tag.startswith("!"):
             return
         self.implicit_tags(tag)

@@ -1,5 +1,5 @@
 import pytest
-from browser.html_parser import HTMLParser, Text, Element
+from browser.html_parser import HTMLParser, Text, Element, get_attributes
 
 
 class TestHTMLParser:
@@ -100,29 +100,34 @@ class TestHTMLParser:
 
 class TestGetAttributes:
     def test_no_attributes(self):
-        parser = HTMLParser("")
-        tag, attrs = parser.get_attributes("div")
+        tag, attrs = get_attributes("div")
         assert tag == "div"
         assert attrs == {}
 
     def test_single_attribute(self):
-        parser = HTMLParser("")
-        tag, attrs = parser.get_attributes('a href="test"')
+        tag, attrs = get_attributes('a href="test"')
         assert tag == "a"
         assert attrs["href"] == "test"
 
     def test_multiple_attributes(self):
-        parser = HTMLParser("")
-        tag, attrs = parser.get_attributes('a href="test" class="link"')
+        tag, attrs = get_attributes('a href="test" class="link"')
         assert attrs["href"] == "test"
         assert attrs["class"] == "link"
 
     def test_boolean_attribute(self):
-        parser = HTMLParser("")
-        tag, attrs = parser.get_attributes("input disabled")
+        tag, attrs = get_attributes("input disabled")
         assert attrs["disabled"] == ""
 
     def test_single_quoted(self):
-        parser = HTMLParser("")
-        tag, attrs = parser.get_attributes("a href='test'")
+        tag, attrs = get_attributes("a href='test'")
         assert attrs["href"] == "test"
+
+    def test_class_with_multiple_values(self):
+        tag, attrs = get_attributes('div class="foo bar"')
+        assert tag == "div"
+        assert attrs["class"] == "foo bar"
+
+    def test_class_with_multiple_values_single_quoted(self):
+        tag, attrs = get_attributes("div class='foo bar baz'")
+        assert tag == "div"
+        assert attrs["class"] == "foo bar baz"
