@@ -55,7 +55,8 @@ class HttpHandler(UrlHandler):
             headers={
                 "Host": http_family_url.host,
                 "Connection": "keep-alive" if HTTP_KEEP_ALIVE_FLAG else "close",
-                "Accept-Encoding": "gzip",
+                # "Accept-Encoding": "gzip",
+                "Accept": "*/*",
             },
             version="1.1",
         )

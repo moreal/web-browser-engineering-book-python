@@ -9,51 +9,56 @@ from typing import TYPE_CHECKING, Callable, Literal, Protocol, TypedDict
 if TYPE_CHECKING:
     import tkinter
 
-from browser.html_parser import Element, Text
+from browser.css import CssAttributes, CSSParser, Selector
+from browser.html_parser import Element, ElementLike, Text
 
-BLOCK_ELEMENTS = frozenset({
-    "html",
-    "body",
-    "article",
-    "section",
-    "nav",
-    "aside",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hgroup",
-    "header",
-    "footer",
-    "address",
-    "p",
-    "hr",
-    "pre",
-    "blockquote",
-    "ol",
-    "ul",
-    "menu",
-    "li",
-    "dl",
-    "dt",
-    "dd",
-    "figure",
-    "figcaption",
-    "main",
-    "div",
-    "table",
-    "form",
-    "fieldset",
-    "legend",
-    "details",
-    "summary",
-})
+BLOCK_ELEMENTS = frozenset(
+    {
+        "html",
+        "body",
+        "article",
+        "section",
+        "nav",
+        "aside",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hgroup",
+        "header",
+        "footer",
+        "address",
+        "p",
+        "hr",
+        "pre",
+        "blockquote",
+        "ol",
+        "ul",
+        "menu",
+        "li",
+        "dl",
+        "dt",
+        "dd",
+        "figure",
+        "figcaption",
+        "main",
+        "div",
+        "table",
+        "form",
+        "fieldset",
+        "legend",
+        "details",
+        "summary",
+    }
+)
 
-SKIP_ELEMENTS = frozenset({
-    "head",
-})
+SKIP_ELEMENTS = frozenset(
+    {
+        "head",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,7 @@ class DrawText:
     y: int
     text: str
     font: FontWrapper
+    color: str
 
     @property
     def top(self) -> int:
@@ -76,7 +82,12 @@ class DrawText:
 
     def execute(self, scroll: int, canvas: tkinter.Canvas) -> None:
         canvas.create_text(
-            self.x, self.y - scroll, text=self.text, font=self.font.font, anchor="nw"
+            self.x,
+            self.y - scroll,
+            text=self.text,
+            font=self.font.font,
+            anchor="nw",
+            fill=self.color,
         )
 
 
@@ -113,7 +124,7 @@ class LayoutBox:
     height: int
     children: tuple["LayoutBox", ...]
     display_list: tuple[DrawCommand, ...]
-    node: Element | Text
+    node: ElementLike | Text
 
 
 class FontWrapper:
@@ -161,7 +172,7 @@ def get_font(size: int, bold: bool, italic: bool) -> FontWrapper:
     return FONT_CACHE[key]
 
 
-def get_layout_mode(node: Element | Text) -> str:
+def get_layout_mode(node: ElementWithStyle | Text) -> str:
     """Return 'inline' or 'block' based on node type and children."""
     if isinstance(node, Text):
         return "inline"
@@ -177,14 +188,20 @@ def get_layout_mode(node: Element | Text) -> str:
 
 
 def layout_document(
-    node: Element, width: int, hstep: int, vstep: int, get_font: GetFont
+    node: ElementLike, width: int, hstep: int, vstep: int, get_font: GetFont
 ) -> LayoutBox:
     """Layout the entire document, returns immutable LayoutBox tree."""
+
     return layout_block(node, hstep, 0, width - 2 * hstep, hstep, get_font)
 
 
 def layout_block(
-    node: Element | Text, x: int, y: int, width: int, hstep: int, get_font: GetFont
+    node: ElementLike | Text,
+    x: int,
+    y: int,
+    width: int,
+    hstep: int,
+    get_font: GetFont,
 ) -> LayoutBox:
     """Layout a single block, returns immutable LayoutBox."""
     mode = get_layout_mode(node)
@@ -193,11 +210,14 @@ def layout_block(
     if mode == "inline":
         content_display_list, height = layout_inline(node, x, y, width, hstep, get_font)
 
-        # Add background for pre tag
-        if isinstance(node, Element) and node.tag == "pre":
-            background_cmds.append(
-                DrawRect(x1=x, y1=y, x2=x + width, y2=y + height, color="gray")
-            )
+        if isinstance(node, Element) and "background-color" in node.style:
+            background_color = node.style["background-color"]
+            if background_color != "transparent":
+                background_cmds.append(
+                    DrawRect(
+                        x1=x, y1=y, x2=x + width, y2=y + height, color=background_color
+                    )
+                )
 
         return LayoutBox(
             x=x,
@@ -221,11 +241,19 @@ def layout_block(
 
         total_height = cursor_y - y
 
-        # Add background for pre tag
-        if isinstance(node, Element) and node.tag == "pre":
-            background_cmds.append(
-                DrawRect(x1=x, y1=y, x2=x + width, y2=y + total_height, color="gray")
-            )
+        if isinstance(node, Element) and "background-color" in node.style:
+            background_color = node.style["background-color"]
+            print(background_color)
+            if background_color != "transparent":
+                background_cmds.append(
+                    DrawRect(
+                        x1=x,
+                        y1=y,
+                        x2=x + width,
+                        y2=y + total_height,
+                        color=background_color,
+                    )
+                )
 
         return LayoutBox(
             x=x,
@@ -256,15 +284,23 @@ class _InlineLayoutState:
         self.style = "roman"
         self.size = 16
 
-        self.line: list[tuple[int, str, FontLike]] = []
+        self.line: list[tuple[int, str, FontWrapper, str]] = []
         self.display_list: list[DrawCommand] = []
 
-    def word(self, word: str) -> None:
-        font = self.get_font(self.size, self.weight == "bold", self.style == "italic")
+    def word(self, node: ElementLike, word: str) -> None:
+        color = node.style["color"]
+        weight = node.style["font-weight"]
+        style = (
+            "roman"
+            if node.style["font-style"] == "normal"
+            else node.style["font-style"]
+        )
+        size = int(float(node.style["font-size"][:-2]) * 0.75)
+        font = self.get_font(size, weight == "bold", style == "italic")
         w = font.measure(word)
         if self.cursor_x + w > self.max_x:
             self.flush()
-        self.line.append((self.cursor_x, word, font))
+        self.line.append((self.cursor_x, word, font, color))
         self.cursor_x += w + font.measure(" ")
 
     def open_tag(self, tag: str) -> None:
@@ -298,34 +334,36 @@ class _InlineLayoutState:
 
         # Collect metrics once, extract ascent/descent values
         line_with_metrics = [
-            (x, word, font, font.metrics())
-            for x, word, font in self.line
+            (x, word, font, font.metrics(), color) for x, word, font, color in self.line
         ]
         max_ascent = max(
             m["ascent"] if isinstance(m, dict) else m
-            for _, _, _, m in line_with_metrics
+            for _, _, _, m, _ in line_with_metrics
         )
         baseline = self.cursor_y + 1.25 * max_ascent
 
-        for x, word, font, m in line_with_metrics:
+        for x, word, font, m, color in line_with_metrics:
             ascent = m["ascent"] if isinstance(m, dict) else 0
             y = baseline - ascent
-            self.display_list.append(DrawText(x=x, y=int(y), text=word, font=font))
+            self.display_list.append(
+                DrawText(x=x, y=int(y), text=word, font=font, color=color)
+            )
 
         max_descent = max(
             m["descent"] if isinstance(m, dict) else 4
-            for _, _, _, m in line_with_metrics
+            for _, _, _, m, _ in line_with_metrics
         )
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = self.start_x
         self.line = []
 
 
-def _recurse_inline(state: _InlineLayoutState, node: Element | Text) -> None:
+def _recurse_inline(state: _InlineLayoutState, node: ElementLike | Text) -> None:
     """Recursively process nodes for inline layout."""
     if isinstance(node, Text):
         for word in node.text.split():
-            state.word(word)
+            assert isinstance(node.parent, Element)
+            state.word(node.parent, word)
     else:
         state.open_tag(node.tag)
         for child in node.children:
@@ -334,7 +372,12 @@ def _recurse_inline(state: _InlineLayoutState, node: Element | Text) -> None:
 
 
 def layout_inline(
-    node: Element | Text, x: int, y: int, width: int, hstep: int, get_font: GetFont
+    node: ElementLike | Text,
+    x: int,
+    y: int,
+    width: int,
+    hstep: int,
+    get_font: GetFont,
 ) -> tuple[tuple[DrawCommand, ...], int]:
     """Layout inline content, returns (display_list, height)."""
     state = _InlineLayoutState(x, y, width, hstep, get_font)

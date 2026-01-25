@@ -1,13 +1,12 @@
-import functools
-import logging
 import pathlib
 import tkinter
 from dataclasses import dataclass
-from typing import Literal
+from typing import Iterator, Literal
 
-from browser.content import Content, HtmlContent
-from browser.content_fetcher import fetch_content
-from browser.html_parser import HTMLParser
+from browser.content import Content, CssContent, HtmlContent
+from browser.content_fetcher import _parse_url, fetch_content
+from browser.css import CssAttributes, CSSParser, Selector
+from browser.html_parser import Element, ElementLike, HTMLParser
 from browser.layout import (
     DrawCommand,
     DrawRect,
@@ -37,9 +36,12 @@ class Browser:
         self.width = width
         self.rtl = rtl
         self.HSTEP, self.VSTEP = 13, 18
+        self._current_url: Url | None = None
 
         self.window = tkinter.Tk()
-        self.canvas = tkinter.Canvas(self.window, height=self.height, width=self.width)
+        self.canvas = tkinter.Canvas(
+            self.window, height=self.height, width=self.width, bg="white"
+        )
         self.canvas.pack(fill=tkinter.BOTH, expand=True)
 
         self.scroll = 0
@@ -89,6 +91,7 @@ class Browser:
         self._update_display_list()
 
     def open(self, url: str | Url) -> None:
+        self._current_url = _parse_url(url)
         self.update_content(fetch_content(url))
 
     def _render(self):
@@ -104,11 +107,13 @@ class Browser:
 
     def _update_display_list(self):
         assert self._current_content is not None
+        assert self._current_url is not None
         display_list = _get_display_list(
             self._current_content,
             width=self.width,
             hstep=self.HSTEP,
             vstep=self.VSTEP,
+            url=self._current_url,
             rtl=self.rtl,
         )
         self._current_max_height = _get_max_height(display_list, self.VSTEP)
@@ -168,14 +173,98 @@ def _load_image(path: str) -> tkinter.PhotoImage:
     return _image_cache[path]
 
 
+BROWSER_CSS = """
+pre { background-color: gray; }
+a { color: blue; }
+i { font-style: italic; }
+b { font-weight: bold; }
+small { font-size: 90%; }
+big { font-size: 110%; }
+"""
+RULES = CSSParser(BROWSER_CSS).parse()
+
+DEFAULT_INHERITED_PROPERTIES = {
+    "font-size": "16px",
+    "font-style": "normal",
+    "font-weight": "normal",
+    "color": "black",
+}
+
+
+def fill_style_with_rules(
+    element: ElementLike, rules: list[tuple[Selector, CssAttributes]]
+) -> ElementLike:
+    style = {}
+
+    # Inheritence
+    for property, default_value in DEFAULT_INHERITED_PROPERTIES.items():
+        if element.parent:  # from parent.
+            element.style[property] = element.parent.style[property]
+        else:  # from default. (maybe only root)
+            element.style[property] = default_value
+
+    for selector, attributes in rules:
+        if selector.matches(element):
+            style.update(attributes)
+
+    if "style" in element.attributes:
+        style_string = element.attributes["style"]
+        style.update(CSSParser(style_string).parse_body())
+
+    if element.style["font-size"].endswith("%"):
+        if element.parent:
+            parent_font_size = element.parent.style["font-size"]
+        else:
+            parent_font_size = DEFAULT_INHERITED_PROPERTIES["font-size"]
+        node_pct = float(element.style["font-size"][:-1]) / 100
+        parent_px = float(parent_font_size[:-2])
+        element.style["font-size"] = str(node_pct * parent_px) + "px"
+
+    children = list(
+        map(
+            lambda child: fill_style_with_rules(child, rules)
+            if isinstance(child, Element)
+            else child,
+            element.children,
+        )
+    )
+
+    return Element(element.tag, element.attributes, element.parent, children, style)
+
+
+def iterate_element_recursively(element: ElementLike) -> Iterator[ElementLike]:
+    yield element
+    for child in element.children:
+        if isinstance(child, Element):
+            yield from iterate_element_recursively(child)
+
+
+def cascade_priority(rule: tuple[Selector, dict[str, str]]):
+    selector, _ = rule
+    return selector.priority
+
+
 def _get_display_list(
-    content: Content, *, hstep: int, vstep: int, width: int, rtl: bool = False
+    content: Content, *, hstep: int, vstep: int, width: int, url: Url, rtl: bool = False
 ) -> DisplayList:
     match content:
         case HtmlContent():
             body = content.data.decode("utf-8")
-            nodes = HTMLParser(body).parse()
-            box = layout_document(nodes, width, hstep, vstep, get_font)
+            document = HTMLParser(body).parse()
+            links = [
+                url.resolve(element.attributes["href"])
+                for element in iterate_element_recursively(document)
+                if element.tag == "link"
+                and element.attributes.get("rel") == "stylesheet"
+                and "href" in element.attributes
+            ]
+            # print(links)
+            rules = sorted(RULES, key=cascade_priority)
+            css_contents = [fetch_content(link) for link in links]
+            # print(css_contents)
+            assert all(isinstance(x, CssContent) for x in css_contents)
+            document = fill_style_with_rules(document, rules)
+            box = layout_document(document, width, hstep, vstep, get_font)
             return collect_display_list(box)
         case _:
             return []

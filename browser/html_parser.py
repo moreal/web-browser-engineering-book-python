@@ -1,3 +1,6 @@
+from typing import Protocol
+
+
 class Text:
     def __init__(self, text: str, parent: Element | None):
         self.text = text
@@ -8,45 +11,65 @@ class Text:
         return repr(self.text)
 
 
-class Element:
-    def __init__(self, tag: str, attributes: dict[str, str], parent: Element | None):
+class ElementLike(Protocol):
+    tag: str
+    parent: ElementLike | None
+    children: list[Text | ElementLike]
+    attributes: dict[str, str]
+    style: dict[str, str]
+
+
+class Element(ElementLike):
+    def __init__(
+        self,
+        tag: str,
+        attributes: dict[str, str],
+        parent: ElementLike | None,
+        children: list[Text | ElementLike] | None = None,
+        style: dict[str, str] | None = None,
+    ):
         self.tag = tag
         self.attributes = attributes
-        self.children: list[Text | Element] = []
+        self.children = children or []
         self.parent = parent
+        self.style = style or {}
 
     def __repr__(self):
         return "<" + self.tag + ">"
 
 
-SELF_CLOSING_TAGS = frozenset({
-    "area",
-    "base",
-    "br",
-    "col",
-    "embed",
-    "hr",
-    "img",
-    "input",
-    "link",
-    "meta",
-    "param",
-    "source",
-    "track",
-    "wbr",
-})
+SELF_CLOSING_TAGS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
 
-HEAD_TAGS = frozenset({
-    "base",
-    "basefont",
-    "bgsound",
-    "noscript",
-    "link",
-    "meta",
-    "title",
-    "style",
-    "script",
-})
+HEAD_TAGS = frozenset(
+    {
+        "base",
+        "basefont",
+        "bgsound",
+        "noscript",
+        "link",
+        "meta",
+        "title",
+        "style",
+        "script",
+    }
+)
 
 
 class HTMLParser:
@@ -120,12 +143,21 @@ class HTMLParser:
             num_open = len(self.unfinished)
             if num_open == 0 and tag != "html":
                 self.add_tag("html")
-            elif num_open == 1 and self.unfinished[0].tag == "html" and tag not in {"head", "body", "/html"}:
+            elif (
+                num_open == 1
+                and self.unfinished[0].tag == "html"
+                and tag not in {"head", "body", "/html"}
+            ):
                 if tag in HEAD_TAGS:
                     self.add_tag("head")
                 else:
                     self.add_tag("body")
-            elif num_open == 2 and self.unfinished[0].tag == "html" and self.unfinished[1].tag == "head" and tag not in {"/head"} | HEAD_TAGS:
+            elif (
+                num_open == 2
+                and self.unfinished[0].tag == "html"
+                and self.unfinished[1].tag == "head"
+                and tag not in {"/head"} | HEAD_TAGS
+            ):
                 self.add_tag("/head")
             else:
                 break

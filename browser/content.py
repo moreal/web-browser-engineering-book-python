@@ -18,6 +18,7 @@ type Content = (
     | UnhandledContent
     | PlainTextContent
     | HtmlContent
+    | CssContent
     | ViewSource
 )
 
@@ -53,6 +54,12 @@ class HtmlContent:
 
 
 @dataclass(frozen=True)
+class CssContent:
+    data: bytes
+    media_type: Literal["text/css"] = "text/css"
+
+
+@dataclass(frozen=True)
 class ViewSource:
     content: Content
 
@@ -64,6 +71,8 @@ def recognize_content(media_type: MediaType, data: bytes) -> Content:
         case MediaType(type="text", subtype="plain"):
             charset = media_type.parameters.get("charset") or "iso-8859-1"
             return PlainTextContent(text=data.decode(charset))
+        case MediaType(type="text", subtype="css"):
+            return CssContent(data)
         case MediaType(type="image", subtype="jpeg"):
             return ImageContent(media_type=media_type, bytes=data)
         case _:

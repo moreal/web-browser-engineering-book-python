@@ -74,7 +74,7 @@ class Url:
 
         match = re.match(regex, s)
         if not match:
-            return UrlParseError()
+            return UrlParseError("message")
 
         scheme_value = match.group("scheme")
         username_value = match.group("username")
@@ -96,8 +96,35 @@ class Url:
             fragment=fragment_value,
         )
 
-    def resolve(self, relative_url: str) -> Url:
-        return self
+    def resolve(self, url: str) -> Url:
+        print("resolve debugging", self, url)
+        if "://" in url:
+            parsed = Url.parse(url)
+            assert isinstance(parsed, Url)
+            return parsed
+        if not url.startswith("/"):
+            assert self.path is not None
+            dir, _ = self.path.rsplit("/", 1)
+            while url.startswith("../"):
+                _, url = url.split("/", 1)
+                if "/" in dir:
+                    dir, _ = dir.rsplit("/", 1)
+            url = dir + "/" + url
+        if url.startswith("//"):
+            parsed = Url.parse(self.scheme + ":" + url)
+            assert isinstance(parsed, Url)
+            return parsed
+        else:
+            assert self.host is not None
+            parsed = Url.parse(
+                self.scheme
+                + "://"
+                + self.host
+                + (":" + str(self.port) if self.port else "")
+                + url
+            )
+            assert isinstance(parsed, Url)
+            return parsed
 
 
 @dataclass(frozen=True)

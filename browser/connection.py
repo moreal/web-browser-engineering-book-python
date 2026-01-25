@@ -1,8 +1,9 @@
-from dataclasses import dataclass
 import socket
 import ssl
 import time
+from dataclasses import dataclass
 from typing import Final, Literal
+
 from browser.protocols.http.header_map import HeaderMap
 from browser.protocols.http.request import (
     HTTP_LINE_SEPARATOR,
@@ -11,7 +12,6 @@ from browser.protocols.http.request import (
 )
 from browser.protocols.http.response import HttpResponse
 from browser.url import HttpFamilyUrl
-
 
 __all__ = ("Connection",)
 
@@ -63,8 +63,8 @@ class Connection:
         _sent_bytes = self._socket.send(encoder.encode(request))
 
         statusline = self._reader.readline().decode("iso-8859-1")
-        # print("request", request)
-        # print("statusline", statusline.encode())
+        print("request", request)
+        print("statusline", statusline.encode())
         version, status_code, status_message = statusline.split(" ", 2)
 
         headers = dict[str, str]()
