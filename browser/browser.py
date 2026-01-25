@@ -180,6 +180,12 @@ i { font-style: italic; }
 b { font-weight: bold; }
 small { font-size: 90%; }
 big { font-size: 110%; }
+h1 { font-size: 200%; }
+h2 { font-size: 150%; }
+h3 { font-size: 125%; }
+h4 { font-size: 110%; }
+h5 { font-size: 100%; }
+h6 { font-size: 90%; }
 """
 RULES = CSSParser(BROWSER_CSS).parse()
 
@@ -210,6 +216,8 @@ def fill_style_with_rules(
     if "style" in element.attributes:
         style_string = element.attributes["style"]
         style.update(CSSParser(style_string).parse_body())
+
+    element.style.update(style)
 
     if element.style["font-size"].endswith("%"):
         if element.parent:

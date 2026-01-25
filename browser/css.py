@@ -96,7 +96,8 @@ class CSSParser:
     def word(self):
         start = self.cursor
         while self.cursor < len(self.text) and (
-            self.text[self.cursor].isalnum() or self.text[self.cursor] == "-"
+            self.text[self.cursor].isalnum()
+            or self.text[self.cursor] in "-#.%"
         ):
             self.cursor += 1
         if self.cursor == start:
