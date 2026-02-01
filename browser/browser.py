@@ -180,7 +180,7 @@ def _load_image(path: str) -> tkinter.PhotoImage:
 
 BROWSER_CSS = """
 pre { background-color: gray; }
-a { color: blue; }
+a { color: blue !important; color: red; }
 i { font-style: italic; }
 b { font-weight: bold; }
 small { font-size: 90%; }
@@ -216,15 +216,25 @@ def fill_style_with_rules(
         else:  # from default. (maybe only root)
             element.style[property] = default_value
 
+    important_properties: set[str] = set()
+
     for rule in rules:
         if rule.selector.matches(element):
             for decl in rule.declarations:
+                if decl.name in important_properties:
+                    continue
                 style[decl.name] = decl.value
+                if decl.important:
+                    important_properties.add(decl.name)
 
     if "style" in element.attributes:
         style_string = element.attributes["style"]
         for decl in CSSParser(style_string).parse_body():
+            if decl.name in important_properties:
+                continue
             style[decl.name] = decl.value
+            if decl.important:
+                important_properties.add(decl.name)
 
     element.style.update(style)
 
