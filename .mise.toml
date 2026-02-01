@@ -6,5 +6,9 @@ run = "uv run python -m browser"
 description = "Run HTTP server for examples"
 run = "cd examples && uv run python -m http.server"
 
+[tasks.format]
+description = "Format code with ruff and hongdown"
+run = ["ruff format", "hongdown -w ."]
+
 [tools]
 "github:dahlia/hongdown" = "latest"
