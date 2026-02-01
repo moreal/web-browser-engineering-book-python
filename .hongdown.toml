@@ -1,0 +1,8 @@
+include = ["**/*.md"]
+exclude = [".pytest_cache/**/*", ".venv/**/*", ".git/**/*", ".ruff_cache/**/*"]
+
+[heading]
+sentence_case = true
+proper_nouns = [
+  "mise",
+]
