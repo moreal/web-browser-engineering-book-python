@@ -72,7 +72,9 @@ class TestLayoutDocument:
         text = Text("hello world", body)
         body.children.append(text)
 
-        box = layout_document(root, width=800, hstep=13, vstep=18, get_font=mock_get_font)
+        box = layout_document(
+            root, width=800, hstep=13, vstep=18, get_font=mock_get_font
+        )
 
         assert box.x == 13
         assert box.y == 0
@@ -89,7 +91,9 @@ class TestLayoutBlock:
         parent.children.append(p1)
         parent.children.append(p2)
 
-        box = layout_block(parent, x=0, y=0, width=800, hstep=13, get_font=mock_get_font)
+        box = layout_block(
+            parent, x=0, y=0, width=800, hstep=13, get_font=mock_get_font
+        )
 
         assert len(box.children) == 2
         child1, child2 = box.children
@@ -105,7 +109,9 @@ class TestLayoutBlock:
         parent.children.append(p1)
         parent.children.append(p2)
 
-        box = layout_block(parent, x=0, y=0, width=800, hstep=13, get_font=mock_get_font)
+        box = layout_block(
+            parent, x=0, y=0, width=800, hstep=13, get_font=mock_get_font
+        )
 
         expected_height = sum(child.height for child in box.children)
         assert box.height == expected_height
@@ -136,7 +142,9 @@ class TestCollectDisplayList:
         text = Text("hello world", body)
         body.children.append(text)
 
-        box = layout_document(root, width=800, hstep=13, vstep=18, get_font=mock_get_font)
+        box = layout_document(
+            root, width=800, hstep=13, vstep=18, get_font=mock_get_font
+        )
         display_list = collect_display_list(box)
 
         assert len(display_list) > 0

@@ -48,6 +48,7 @@ class Browser:
 
         self._bind_events()
         self._current_content: Content | None = None
+        self._styled_document: Element | None = None
         self._current_display_list: DisplayList = []
         self._current_max_height: int = 0
 
@@ -88,7 +89,7 @@ class Browser:
         self.scroll = max(
             min(self.scroll + delta, self._current_max_height - self.height), 0
         )
-        self._update_display_list()
+        self._render()
 
     def open(self, url: str | Url) -> None:
         self._current_url = _parse_url(url)
@@ -97,37 +98,41 @@ class Browser:
     def _render(self):
         match self._current_content:
             case HtmlContent():
-                self._display(self._current_display_list)
+                display_list = list(self._current_display_list)
+                if (
+                    vertical_scroll_bar := _get_vertical_scroll_bar(
+                        max_height=self._current_max_height,
+                        scroll=self.scroll,
+                        width=self.width,
+                        height=self.height,
+                    )
+                ) is not None:
+                    display_list.append(vertical_scroll_bar)
+                self._display(display_list)
             case _:
                 pass
 
     def update_content(self, content: Content):
         self._current_content = content
+        assert self._current_url is not None
+        if isinstance(content, HtmlContent):
+            self._styled_document = _style_document(content, self._current_url)
+        else:
+            self._styled_document = None
         self._update_display_list()
 
     def _update_display_list(self):
         assert self._current_content is not None
-        assert self._current_url is not None
-        display_list = _get_display_list(
-            self._current_content,
+        self._current_display_list = _layout_document(
+            self._styled_document,
             width=self.width,
             hstep=self.HSTEP,
             vstep=self.VSTEP,
-            url=self._current_url,
             rtl=self.rtl,
         )
-        self._current_max_height = _get_max_height(display_list, self.VSTEP)
-        if (
-            vertical_scroll_bar := _get_vertical_scroll_bar(
-                max_height=self._current_max_height,
-                scroll=self.scroll,
-                width=self.width,
-                height=self.height,
-            )
-        ) is not None:
-            display_list.append(vertical_scroll_bar)
-
-        self._current_display_list = display_list
+        self._current_max_height = _get_max_height(
+            self._current_display_list, self.VSTEP
+        )
         self._render()
 
     def _display(self, display_list: DisplayList):
@@ -254,36 +259,41 @@ def cascade_priority(rule: tuple[Selector, dict[str, str]]):
     return selector.priority
 
 
-def _get_display_list(
-    content: Content, *, hstep: int, vstep: int, width: int, url: Url, rtl: bool = False
+def _style_document(content: HtmlContent, url: Url) -> Element:
+    body = content.data.decode("utf-8")
+    document = HTMLParser(body).parse()
+    links = [
+        url.resolve(element.attributes["href"])
+        for element in iterate_element_recursively(document)
+        if element.tag == "link"
+        and element.attributes.get("rel") == "stylesheet"
+        and "href" in element.attributes
+    ]
+    css_contents = [fetch_content(link) for link in links]
+
+    rules = list(BROWSER_CSS_RULES)
+    for css_content in css_contents:
+        assert isinstance(css_content, CssContent)
+        # FIXME: encoding
+        # FIXME: Cannot load css files form browser.engineering
+        # rules.extend(CSSParser(css_content.data.decode("utf-8")).parse())
+
+    rules = sorted(rules, key=cascade_priority)
+    return fill_style_with_rules(document, rules)
+
+
+def _layout_document(
+    styled_document: Element | None,
+    *,
+    hstep: int,
+    vstep: int,
+    width: int,
+    rtl: bool = False,
 ) -> DisplayList:
-    match content:
-        case HtmlContent():
-            body = content.data.decode("utf-8")
-            document = HTMLParser(body).parse()
-            links = [
-                url.resolve(element.attributes["href"])
-                for element in iterate_element_recursively(document)
-                if element.tag == "link"
-                and element.attributes.get("rel") == "stylesheet"
-                and "href" in element.attributes
-            ]
-            css_contents = [fetch_content(link) for link in links]
-
-            rules = list(BROWSER_CSS_RULES)
-            for css_content in css_contents:
-                assert isinstance(css_content, CssContent)
-                # FIXME: encoding
-                # FIXME: Cannot load css files form browser.engineering
-                # rules.extend(CSSParser(css_content.data.decode("utf-8")).parse())
-
-            rules = sorted(rules, key=cascade_priority)
-            print(*rules, sep="\n")
-            document = fill_style_with_rules(document, rules)
-            box = layout_document(document, width, hstep, vstep, get_font)
-            return collect_display_list(box)
-        case _:
-            return []
+    if styled_document is None:
+        return []
+    box = layout_document(styled_document, width, hstep, vstep, get_font)
+    return collect_display_list(box)
 
 
 _OPENMOJI_BASE_PATH = pathlib.Path("data/openmoji")
