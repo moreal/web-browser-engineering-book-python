@@ -1,0 +1,7 @@
+[tasks.browser]
+description = "Run the browser with a URL"
+run = "uv run python -m browser"
+
+[tasks.example]
+description = "Run HTTP server for examples"
+run = "cd examples && uv run python -m http.server"
