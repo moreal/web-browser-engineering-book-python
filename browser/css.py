@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from browser.cascade.selector import (
     ClassSelector,
     DecendantSelector,
@@ -7,6 +9,19 @@ from browser.cascade.selector import (
 )
 
 type CssAttributes = dict[str, str]
+
+
+@dataclass(frozen=True)
+class Declaration:
+    name: str
+    value: str
+    important: bool = False
+
+
+@dataclass(frozen=True)
+class QualifiedRule:
+    selector: Selector
+    declarations: list[Declaration]
 
 
 # Expected input:
@@ -58,7 +73,7 @@ class CSSParser:
             self.skip_whitespace()
         return selector
 
-    def parse(self) -> list[tuple[Selector, dict[str, str]]]:
+    def parse(self) -> list[QualifiedRule]:
         rules = []
         self.skip_whitespace()
         while self.cursor < len(self.text):
@@ -66,15 +81,15 @@ class CSSParser:
             self.skip_whitespace()
             self.require_char("{")
             self.skip_whitespace()
-            attributes = self.parse_body()
-            rules.append((selector, attributes))
+            declarations = self.parse_body()
+            rules.append(QualifiedRule(selector, declarations))
             self.skip_whitespace()
             self.require_char("}")
             self.skip_whitespace()
         return rules
 
-    def parse_body(self) -> dict[str, str]:
-        pairs = {}
+    def parse_body(self) -> list[Declaration]:
+        declarations = []
         self.skip_whitespace()
         while self.cursor < len(self.text) and self.text[self.cursor] != "}":
             key = self.word()
@@ -83,12 +98,12 @@ class CSSParser:
             self.require_char(":")
             self.skip_whitespace()
             value = self.word()
-            pairs[key] = value
+            declarations.append(Declaration(name=key, value=value))
             why = self.skip_until({"}", ";"})
             if why == ";":
                 self.cursor += 1
             self.skip_whitespace()
-        return pairs
+        return declarations
 
     def word(self, allowed_characters: str = "-#.%"):
         start = self.cursor

@@ -5,7 +5,7 @@ from typing import Iterator, Literal
 
 from browser.content import Content, CssContent, HtmlContent
 from browser.content_fetcher import _parse_url, fetch_content
-from browser.css import CssAttributes, CSSParser, Selector
+from browser.css import CssAttributes, CSSParser, Declaration, QualifiedRule, Selector
 from browser.html_parser import Element, ElementLike, HTMLParser
 from browser.layout import (
     DrawCommand,
@@ -205,7 +205,7 @@ DEFAULT_INHERITED_PROPERTIES = {
 
 
 def fill_style_with_rules(
-    element: ElementLike, rules: list[tuple[Selector, CssAttributes]]
+    element: ElementLike, rules: list[QualifiedRule]
 ) -> ElementLike:
     style = {}
 
@@ -216,13 +216,15 @@ def fill_style_with_rules(
         else:  # from default. (maybe only root)
             element.style[property] = default_value
 
-    for selector, attributes in rules:
-        if selector.matches(element):
-            style.update(attributes)
+    for rule in rules:
+        if rule.selector.matches(element):
+            for decl in rule.declarations:
+                style[decl.name] = decl.value
 
     if "style" in element.attributes:
         style_string = element.attributes["style"]
-        style.update(CSSParser(style_string).parse_body())
+        for decl in CSSParser(style_string).parse_body():
+            style[decl.name] = decl.value
 
     element.style.update(style)
 
@@ -254,9 +256,8 @@ def iterate_element_recursively(element: ElementLike) -> Iterator[ElementLike]:
             yield from iterate_element_recursively(child)
 
 
-def cascade_priority(rule: tuple[Selector, dict[str, str]]):
-    selector, _ = rule
-    return selector.priority
+def cascade_priority(rule: QualifiedRule):
+    return rule.selector.priority
 
 
 def _style_document(content: HtmlContent, url: Url) -> Element:
