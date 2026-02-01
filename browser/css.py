@@ -1,70 +1,10 @@
-from dataclasses import dataclass
-from typing import Protocol
-
-from browser.html_parser import ElementLike
-
-
-class Selector(Protocol):
-    priority: int
-
-    def matches(self, element: ElementLike) -> bool: ...
-
-
-@dataclass(frozen=True)
-class TagSelector(Selector):
-    tag: str
-    priority: int = 1
-
-    def matches(self, element: ElementLike) -> bool:
-        return element.tag == self.tag
-
-
-@dataclass(frozen=True)
-class ClassSelector(Selector):
-    class_name: str
-    priority: int = 10
-
-    def matches(self, element: ElementLike) -> bool:
-        return (
-            "class" in element.attributes
-            and self.class_name in element.attributes["class"].split()
-        )
-
-
-class SelectorSequence(Selector):
-    def __init__(self, *selectors: Selector):
-        self.selectors = selectors
-        self.priority = sum(selector.priority for selector in selectors)
-
-    def matches(self, element: ElementLike) -> bool:
-        for selector in self.selectors:
-            if not selector.matches(element):
-                return False
-        return True
-
-
-class DecendantSelector(Selector):
-    def __init__(self, ancestor: Selector, descendant: Selector):
-        self.ancestor = ancestor
-        self.descendant = descendant
-        self.priority = ancestor.priority + descendant.priority
-
-    def matches(self, element: ElementLike) -> bool:
-        # Let assume self is (ancestor=div, descendant=p)
-        # Ensure element is p. If not, return False
-        if not self.descendant.matches(element):
-            return False
-
-        # Ensure some parent, grand parent, grand grand parent, ..., is div.
-        current_element = element
-        while current_element.parent:
-            if self.ancestor.matches(current_element.parent):
-                return True
-            current_element = current_element.parent
-
-        # If not, return False.
-        return False
-
+from browser.cascade.selector import (
+    ClassSelector,
+    DecendantSelector,
+    Selector,
+    SelectorSequence,
+    TagSelector,
+)
 
 type CssAttributes = dict[str, str]
 
