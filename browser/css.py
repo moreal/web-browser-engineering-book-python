@@ -98,7 +98,16 @@ class CSSParser:
             self.require_char(":")
             self.skip_whitespace()
             value = self.word()
-            declarations.append(Declaration(name=key, value=value))
+            self.skip_whitespace()
+            important = False
+            if (
+                self.cursor < len(self.text)
+                and self.text[self.cursor] == "!"
+            ):
+                self.cursor += 1
+                if self.word() == "important":
+                    important = True
+            declarations.append(Declaration(name=key, value=value, important=important))
             why = self.skip_until({"}", ";"})
             if why == ";":
                 self.cursor += 1
